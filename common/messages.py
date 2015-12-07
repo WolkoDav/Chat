@@ -2,20 +2,10 @@ import copy
 import base64
 import pickle
 import datetime
-from struct import pack, unpack
+from struct import pack
 
 
 class Message():
-
-    def pack(self):
-        raise NotImplementedError()
-
-    @classmethod
-    def unpack(cls, message):
-        raise NotImplementedError()
-
-
-class Request(Message):
 
     def __init__(self, command, kwargs):
         self._command = command
@@ -46,21 +36,4 @@ class Request(Message):
         command, data = m.split("\n")
         kwargs = pickle.loads(base64.b64decode(data))
         return cls(command=command, kwargs=kwargs)
-
-
-class Response(Message):
-
-    def __init__(self, status):
-        self._status = status
-
-    @property
-    def status(self):
-        return self._status
-
-    def pack(self):
-        return pack("!H", self._status)
-
-    @classmethod
-    def unpack(cls, message):
-        return cls(unpack("!H", message))
 

@@ -5,12 +5,12 @@ from tornado import gen
 from tornado import iostream
 
 from common.utils import random_string
-from common.messages import Request
+from common.messages import Message
 
 
 class Protocol():
 
-    def __init__(self, stream, handler):
+    def __init__(self, handler, stream):
         super().__init__()
         self._id = random_string(40)
         self._stream = stream
@@ -22,7 +22,7 @@ class Protocol():
 
     @gen.coroutine
     def on_disconnect(self):
-        yield self.handler.disconnect(self._id, self._stream)
+        yield []
 
     @gen.coroutine
     def dispatch_client(self):
@@ -31,8 +31,8 @@ class Protocol():
                 message_length = yield self._stream.read_bytes(2)
                 length = struct.unpack("!H", message_length)[0]
                 message = yield self._stream.read_bytes(length)
-                request = Request.unpack(message=message)
-                handler = self.handler(request)
+                request = Message.unpack(message=message)
+                handler = self.handler(request, self._id)
                 response = yield handler.process_request()
                 yield self._stream.write(response.pack())
         except iostream.StreamClosedError:
@@ -40,5 +40,4 @@ class Protocol():
 
     @gen.coroutine
     def on_connect(self):
-        yield self.handler.connect(self._id, self._stream)
         yield self.dispatch_client()

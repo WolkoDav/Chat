@@ -2,8 +2,8 @@ from .exceptions import AuthException
 
 
 def authenticated(fn):
-    def wrapper(*args, **kwargs):
-        if "user_id" not in kwargs:
+    def wrapper(self, request):
+        if self.get_argument("user_id") is None:
             raise AuthException()
-        return fn(*args, **kwargs)
+        return fn(self, request)
     return wrapper
