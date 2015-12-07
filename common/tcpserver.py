@@ -8,8 +8,9 @@ class TCPServer(tcpserver.TCPServer):
     """
 
     protocol = None
+    handler = None
 
     @gen.coroutine
     def handle_stream(self, stream, address):
-        connection = self.protocol(stream)
+        connection = self.protocol(self.handler, stream)
         yield connection.on_connect()
