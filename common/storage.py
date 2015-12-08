@@ -2,8 +2,12 @@ from tornado import gen
 
 from .messages import Message
 from .utils import Singleton
+from .exceptions import ValueException
+
+__all__ = ['Storage', ]
 
 
+# Подобие локальной БД или Redis
 class Storage(metaclass=Singleton):
 
     def __init__(self):
@@ -21,12 +25,15 @@ class Storage(metaclass=Singleton):
         return self._streams[id_]
 
     def set_room(self, room):
-        if room not in self._rooms:
+        if room is not None and room not in self._rooms:
             self._rooms[room] = set()
+        else:
+            raise ValueException("Room should not be empty")
 
     def set_user(self, user, stream_id):
-        if user not in self._users:
+        if user is not None and stream_id is not None and user not in self._users:
             self._users[user] = stream_id
+        raise ValueException("User or Stream should not be empty")
 
     @gen.coroutine
     def disconnect(self, stream_id):
@@ -35,7 +42,6 @@ class Storage(metaclass=Singleton):
             if self._users[user_id] == stream_id:
                 user = user_id
                 break
-
         if user is not None:
             yield [self.unsubscribe(user, room) for room in self._rooms]
             self._users.pop(user)

@@ -1,10 +1,9 @@
 import os
 import sys
-sys.path.append(os.path.abspath(os.path.dirname(__file__)))
-
 from tornado import gen
 from tornado import options
 from tornado import ioloop
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from common.protocol import Protocol
 from common.tcpserver import TCPServer
@@ -18,6 +17,7 @@ options.define("port", type=int, default=8888, help="PORT", group="listen")
 options.options.parse_command_line()
 
 
+# Обработчик запрос
 class ChatHandler(BaseHandler):
     allowed_commands = ['login', 'join', 'left', 'mess']
 
@@ -30,31 +30,34 @@ class ChatHandler(BaseHandler):
     @gen.coroutine
     def join(self, request):
         room = self.get_argument("room")
-        user_id = self.get_argument("user_id")
+        user_id = self.get_argument("user")
+        self.write(room=room)
         yield self._storage.subscribe(room, user_id)
 
     @authenticated
     @gen.coroutine
     def left(self, request):
-        user_id = self.get_argument("user_id")
+        user_id = self.get_argument("user")
         room = self.get_argument("room")
         yield self._storage.unsubscribe(room, user_id)
 
     @authenticated
     @gen.coroutine
     def mess(self, request):
-        user_id = self.get_argument("user_id")
+        user_id = self.get_argument("user")
         room = self.get_argument("room")
         message = self.get_argument("message")
         yield self._storage.notification(room, user_id, message)
 
 
+# Чат сервер
 class ChatServer(TCPServer):
     protocol = Protocol
     handler = ChatHandler
     storage = Storage
 
 
+# Запуск
 if __name__ == "__main__":
     server = ChatServer()
     server.listen(**options.options.group_dict("listen"))

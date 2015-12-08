@@ -4,7 +4,10 @@ import pickle
 import datetime
 from struct import pack
 
+__all__ = ['Message', ]
 
+
+# Описание протокола
 class Message():
 
     def __init__(self, command, kwargs):
@@ -19,6 +22,7 @@ class Message():
     def kwargs(self):
         return self._kwargs
 
+    # Запоковать
     def pack(self):
         m = []
         kw = copy.deepcopy(self.kwargs)
@@ -31,6 +35,7 @@ class Message():
         m.append(data)
         return b''.join(m)
 
+    # Распоковать
     @classmethod
     def unpack(cls, message):
         m = message.decode()
