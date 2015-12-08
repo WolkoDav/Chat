@@ -22,8 +22,9 @@ class Message():
     def pack(self):
         m = []
         kw = copy.deepcopy(self.kwargs)
-        kw["date"] = datetime.datetime.now()
-        data = base64.b64encode(pickle.dumps(self._kwargs))
+        if 'date' not in kw:
+            kw["date"] = datetime.datetime.now()
+        data = base64.b64encode(pickle.dumps(kw))
         m.append(pack('!H', len(data) + len(self._command) + 1))
         m.append(self._command.encode())
         m.append(b'\n')

@@ -10,9 +10,10 @@ class BaseHandler():
 
     allowed_commands = []
 
-    def __init__(self, request, socket_id):
+    def __init__(self, request, socket_id, storage):
         self._request = request
         self._socket_id = socket_id
+        self._storage = storage
         self._data = {}
         self._status_code = 0
 

@@ -1,9 +1,11 @@
 import os
 import sys
+import fcntl
+import termios
 import struct
-import socket
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 import readline
+from concurrent.futures import ThreadPoolExecutor
 
 from tornado import gen
 from tornado import options
@@ -18,17 +20,15 @@ options.define("port", type=int, default=8888, help="PORT", group="connect")
 options.options.parse_command_line()
 
 
-@gen.coroutine
-def notification(stream):
-    message_length = yield stream.read_bytes(2)
-    length = struct.unpack("!H", message_length)[0]
-    message = yield stream.read_bytes(length)
-    # request = Message.unpack(message=message)
-    sys.stdout.write('\r'+' '*(len(readline.get_line_buffer())+2)+'\r')
-    print(message)
-    sys.stdout.write('> ' + readline.get_line_buffer())
-    sys.stdout.flush()
-    ioloop.IOLoop.instance().add_callback(notification, stream)
+# Хак для очистки
+def blank_current_readline():
+    # Next line said to be reasonably portable for various Unixes
+    rows, cols = struct.unpack('hh', fcntl.ioctl(sys.stdout, termios.TIOCGWINSZ, '1234'))
+    text_len = len(readline.get_line_buffer())+2
+    # ANSI escape sequences (All VT100 except ESC[0G)
+    sys.stdout.write('\x1b[2K')                         # Clear current line
+    sys.stdout.write('\x1b[1A\x1b[2K'*(text_len // cols))  # Move cursor up and clear line
+    sys.stdout.write('\x1b[0G')
 
 
 class UserHandler():
@@ -73,12 +73,14 @@ class UserHandler():
 
 class Application():
 
-    handler = UserHandler
+    user_handler = UserHandler
 
     def __init__(self, stream):
         self._stream = stream
         self.room = None
         self._user_id = None
+        self.executor = ThreadPoolExecutor(1)
+        self.ioloop = ioloop.IOLoop.instance()
 
     @property
     def user(self):
@@ -99,22 +101,36 @@ class Application():
         return command.lower(), text
 
     @gen.coroutine
+    def _notification(self):
+        while True:
+            message_length = yield self._stream.read_bytes(2)
+            length = struct.unpack("!H", message_length)[0]
+            message = yield self._stream.read_bytes(length)
+            blank_current_readline()
+            print(message)
+            sys.stdout.write('> ' + readline.get_line_buffer())
+            sys.stdout.flush()
+
+    @gen.coroutine
     def run(self):
+        self.ioloop.add_callback(self._notification)
         while True:
             try:
-                s = input('> ')
+                s = yield self.executor.submit(lambda: input('> '))
                 command, text = self._parse_command(s)
-                handler = self.handler(self._stream, self)
+                handler = self.user_handler(self._stream, self)
                 yield handler.execute_command(command, text)
             except Exception as e:
                 print(e)
+
+    def stop(self):
+        self.executor.shutdown(wait=False)
 
 
 @gen.coroutine
 def main():
     factory = TCPClient()
-    stream = yield factory.connect(af=socket.AF_INET, **options.options.group_dict("connect"))
-    ioloop.IOLoop.instance().add_callback(notification, stream)
+    stream = yield factory.connect(**options.options.group_dict("connect"))
     app = Application(stream)
     app.run()
 
@@ -123,4 +139,4 @@ if __name__ == '__main__':
         main()
         ioloop.IOLoop.instance().start()
     except KeyboardInterrupt:
-        pass
+        ioloop.IOLoop.instance().stop()
