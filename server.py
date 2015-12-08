@@ -7,7 +7,7 @@ sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from common.protocol import Protocol
 from common.tcpserver import TCPServer
-from common.handler import BaseHandler
+from common.handler import ServerHandler
 from common.auth import authenticated
 from common.storage import Storage
 
@@ -18,7 +18,7 @@ options.options.parse_command_line()
 
 
 # Обработчик запрос
-class ChatHandler(BaseHandler):
+class ChatHandler(ServerHandler):
     allowed_commands = ['login', 'join', 'left', 'mess']
 
     def login(self, request):

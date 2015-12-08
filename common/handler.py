@@ -5,17 +5,30 @@ from tornado import gen
 from common.messages import Message
 from common.exceptions import TcpException, MethodNotExists
 
-__all__ = ['BaseHandler', ]
+__all__ = ['BaseHandler', 'ServerHandler']
 
 
-# Базовый обработчик запросов на сервер
 class BaseHandler():
 
     # Список допустимых программ
     allowed_commands = []
 
-    def __init__(self, request, socket_id, storage):
+    def __init__(self, request, *args, **kwargs):
         self._request = request
+
+    def _get_handler(self, command):
+        handler = None
+        c_l = command.lower()
+        if c_l in self.allowed_commands:
+            handler = getattr(self, c_l, None)
+        return handler
+
+
+# Базовый обработчик запросов на сервер
+class ServerHandler(BaseHandler):
+
+    def __init__(self, request, socket_id, storage):
+        super().__init__(request)
         self._socket_id = socket_id
         self._storage = storage
         self._data = {}
@@ -42,14 +55,11 @@ class BaseHandler():
 
     # Обработка запроса
     def process_request(self):
-        handler = None
         future = gen.TracebackFuture()
         try:
-            command = self._request.command.lower()
-            if command in self.allowed_commands:
-                handler = getattr(self, command, None)
+            handler = self._get_handler(self._request.command)
             if handler is None:
-                raise MethodNotExists(command)
+                raise MethodNotExists(self._request.command)
             handler(self._request)
         except TcpException as e:
             self.write(message=e.message)
