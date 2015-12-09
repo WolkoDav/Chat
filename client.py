@@ -114,7 +114,7 @@ class NotificationHandler(BaseHandler):
         if self._app.room == room:
             self._app.room = None
         date = self._request.kwargs['date']
-        return '[{date}]: You leave the room: "{room}"'.format(date=date, room=room)
+        return '[{date}]: User: {user} leave the room'.format(date=date, room=room)
 
     def mess(self):
         date = self._request.kwargs['date']
