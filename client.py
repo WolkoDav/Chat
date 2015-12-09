@@ -1,18 +1,17 @@
 import os
 import sys
-import fcntl
-import termios
 import struct
-sys.path.append(os.path.abspath(os.path.dirname(__file__)))
-import readline
 from concurrent.futures import ThreadPoolExecutor
-
 from tornado import gen
 from tornado import options
 from tornado import ioloop
 from tornado.tcpclient import TCPClient
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
+from common.utils import print_
+from common.handler import BaseHandler
 from common.messages import Message
+from common.exceptions import EXCEPTION_CODES
 
 
 options.define("host", default="127.0.0.1", help="HOST", group="connect")
@@ -20,79 +19,118 @@ options.define("port", type=int, default=8888, help="PORT", group="connect")
 options.options.parse_command_line()
 
 
-# Хак для очистки
-def blank_current_readline():
-    # Next line said to be reasonably portable for various Unixes
-    rows, cols = struct.unpack('hh', fcntl.ioctl(sys.stdout, termios.TIOCGWINSZ, '1234'))
-    text_len = len(readline.get_line_buffer())+2
-    # ANSI escape sequences (All VT100 except ESC[0G)
-    sys.stdout.write('\x1b[2K')                         # Clear current line
-    sys.stdout.write('\x1b[1A\x1b[2K'*(text_len // cols))  # Move cursor up and clear line
-    sys.stdout.write('\x1b[0G')
+# Обработчик запросов пользователя
+class UserHandler(BaseHandler):
+    # Список допустимых команд
+    allowed_commands = ['login', 'left', 'join', 'mess']
 
-
-class UserHandler():
-    allowed_command = ['login', 'left', 'join', 'mess']
-
-    def __init__(self, stream, app):
-        self._stream = stream
+    def __init__(self, app):
+        self._stream = app._stream
         self._app = app
 
     @gen.coroutine
     def execute_command(self, command, text):
-        handler = None
-        if command in self.allowed_command:
-            handler = getattr(self, command, None)
+        handler = self._get_handler(command)
         if handler is None:
-            raise ValueError("Command does not exists")
-        yield handler(text)
-
-    @gen.coroutine
-    def login(self, username):
-        request = Message("LOGIN", kwargs={"username": username})
+            raise ValueError("Command: {0} does not exists".format(command))
+        request = handler(text)
         yield self._stream.write(request.pack())
 
-    @gen.coroutine
+    def login(self, username):
+        self._app.user = None
+        return Message("LOGIN", kwargs={"username": username})
+
     def left(self, room):
         if self._app.room == room:
             self._app.room = None
-        request = Message("LEFT", kwargs={"user_id": self._app.user, "room": room})
-        yield self._stream.write(request.pack())
+        return Message("LEFT", kwargs={"user": self._app.user, "room": room})
 
-    @gen.coroutine
     def join(self, room):
-        self._app.room = room
-        request = Message("JOIN", kwargs={"user_id": self._app.user, "room": room})
-        yield self._stream.write(request.pack())
+        self._app.room = None
+        return Message("JOIN", kwargs={"user": self._app.user, "room": room})
 
-    @gen.coroutine
     def mess(self, mess):
-        request = Message("JOIN", kwargs={"user_id": self._app.user, "room": self._app.room, "mess": mess})
-        yield self._stream.write(request.pack())
+        return Message("MESS", kwargs={"user": self._app.user, "room": self._app.room, "message": mess})
 
 
+class NotificationHandler(BaseHandler):
+
+    allowed_commands = ['login', 'join', 'left', 'mess']
+
+    def __init__(self, request, app):
+        super().__init__(request)
+        self._app = app
+
+    def process_request(self):
+        if 'code' in self._request.kwargs:
+            if self._request.kwargs['code'] in EXCEPTION_CODES:
+                date = self._request.kwargs['date']
+                message = self._request.kwargs['message']
+                print_("[{date}]-[ERROR]: {message}".format(date=date, message=message))
+                return
+        handler = self._get_handler(self._request.command)
+        if handler is not None:
+            message = handler()
+            if message: print_(message)
+
+    def login(self):
+        self._app.user = user = self._request.kwargs['user']
+        date = self._request.kwargs['date']
+        return '[{date}]: You are login as: "{user}"'.format(date=date, user=user)
+
+    def join(self):
+        self._app.room = room = self._request.kwargs['room']
+        date = self._request.kwargs['date']
+        return '[{date}]: You have joined the room: "{room}"'.format(date=date, room=room)
+
+    def left(self):
+        if 'code' not in self._request.kwargs:
+            room = self._request.kwargs['room']
+            if self._app.room == room:
+                self._app.room = None
+            date = self._request.kwargs['date']
+            return '[{date}]: You leave the room: "{room}"'.format(date=date, room=room)
+
+    def mess(self):
+        if 'code' not in self._request.kwargs:
+            date = self._request.kwargs['date']
+            message = self._request.kwargs['message']
+            return '[{date}]-[{room}]-{user}: {message}'.format(date=date, room=self._app.room,
+                                                                user=self._app.user, message=message)
+
+
+# Клиентское прилоежние
 class Application():
 
     user_handler = UserHandler
+    notification_handler = NotificationHandler
 
     def __init__(self, stream):
         self._stream = stream
-        self.room = None
-        self._user_id = None
+        self._room = None
+        self._user = None
         self.executor = ThreadPoolExecutor(1)
         self.ioloop = ioloop.IOLoop.instance()
 
     @property
+    def stream(self):
+        return self._stream
+
+    @property
     def user(self):
-        return self._user_id
+        return self._user
 
     @property
     def room(self):
-        return self.__room
+        return self._room
+
+    @user.setter
+    def user(self, user):
+        self._user = user
 
     @room.setter
     def room(self, room):
-        self.__room = room
+        self._room = room
 
     def _parse_command(self, s):
         index = s.find(":")
@@ -103,28 +141,33 @@ class Application():
     @gen.coroutine
     def _notification(self):
         while True:
-            message_length = yield self._stream.read_bytes(2)
-            length = struct.unpack("!H", message_length)[0]
-            message = yield self._stream.read_bytes(length)
-            blank_current_readline()
-            print(message)
-            sys.stdout.write('> ' + readline.get_line_buffer())
-            sys.stdout.flush()
+            try:
+                message_length = yield self._stream.read_bytes(2)
+                length = struct.unpack("!H", message_length)[0]
+                message = yield self._stream.read_bytes(length)
+                request = Message.unpack(message)
+                handler = self.notification_handler(request, self)
+                handler.process_request()
+            except OSError as e:
+                print_("Your terminal does not support the conclusion notifications!")
+            except Exception as e:
+                print_(e)
 
     @gen.coroutine
-    def run(self):
-        self.ioloop.add_callback(self._notification)
+    def _worker(self):
         while True:
             try:
                 s = yield self.executor.submit(lambda: input('> '))
                 command, text = self._parse_command(s)
-                handler = self.user_handler(self._stream, self)
+                handler = self.user_handler(self)
                 yield handler.execute_command(command, text)
             except Exception as e:
-                print(e)
+                print_(e)
 
-    def stop(self):
-        self.executor.shutdown(wait=False)
+    @gen.coroutine
+    def run(self):
+        self.ioloop.add_callback(self._notification)
+        self.ioloop.add_callback(self._worker)
 
 
 @gen.coroutine
@@ -132,7 +175,7 @@ def main():
     factory = TCPClient()
     stream = yield factory.connect(**options.options.group_dict("connect"))
     app = Application(stream)
-    app.run()
+    yield app.run()
 
 if __name__ == '__main__':
     try:

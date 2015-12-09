@@ -24,30 +24,30 @@ class ChatHandler(ServerHandler):
     def login(self, request):
         username = self.get_argument("username")
         self._storage.set_user(username, self._socket_id)
-        self.write(user_id=username)
+        self.write(user=username)
 
     @authenticated
     @gen.coroutine
     def join(self, request):
         room = self.get_argument("room")
-        user_id = self.get_argument("user")
+        user = self.get_argument("user")
         self.write(room=room)
-        yield self._storage.subscribe(room, user_id)
+        yield self._storage.subscribe(room, user)
 
     @authenticated
     @gen.coroutine
     def left(self, request):
-        user_id = self.get_argument("user")
         room = self.get_argument("room")
-        yield self._storage.unsubscribe(room, user_id)
+        user = self.get_argument("user")
+        yield self._storage.unsubscribe(room, user)
 
     @authenticated
     @gen.coroutine
     def mess(self, request):
-        user_id = self.get_argument("user")
+        user = self.get_argument("user")
         room = self.get_argument("room")
         message = self.get_argument("message")
-        yield self._storage.notification(room, user_id, message)
+        yield self._storage.notification(room, user, message)
 
 
 # Чат сервер

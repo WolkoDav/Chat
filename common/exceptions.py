@@ -24,3 +24,6 @@ class ValueException(TcpException):
 
     def __init__(self, message):
         self.message = message
+
+
+EXCEPTION_CODES = [2, 3, 4, 5]

@@ -65,6 +65,6 @@ class ServerHandler(BaseHandler):
             self.write(message=e.message)
             self.status_code(e.code)
 
-        response = Message("RESP", kwargs=self.data)
+        response = Message(self._request.command, kwargs=self.data)
         future.set_result(response)
         return future

@@ -33,7 +33,8 @@ class Storage(metaclass=Singleton):
     def set_user(self, user, stream_id):
         if user is not None and stream_id is not None and user not in self._users:
             self._users[user] = stream_id
-        raise ValueException("User or Stream should not be empty")
+        else:
+            raise ValueException("Username: {0} is already user".format(user))
 
     @gen.coroutine
     def disconnect(self, stream_id):
@@ -48,21 +49,24 @@ class Storage(metaclass=Singleton):
         self._streams.pop(stream_id)
 
     @gen.coroutine
-    def subscribe(self, user_id, room):
+    def subscribe(self, user, room):
         self.set_room(room)
-        self._rooms[room].add(user_id)
-        request = Message("JOIN", kwargs={"user_id": user_id, "room": room})
-        yield [s.write(request.pack()) for s in self.get_streams(room)]
+        if user not in self._rooms[room]:
+            request = Message("JOIN", kwargs={"user": user, "room": room})
+            yield [s.write(request.pack()) for s in self.get_streams(room)]
+            self._rooms[room].add(user)
 
     @gen.coroutine
-    def unsubscribe(self, user_id, room):
-        if room in self._rooms and user_id in self._rooms[room]:
-            self._rooms[room].remove(user_id)
-            request = Message("LEFT", kwargs={"user_id": user_id, "room": room})
+    def unsubscribe(self, user, room):
+        if room in self._rooms and user in self._rooms[room]:
+            self._rooms[room].remove(user)
+            request = Message("LEFT", kwargs={"user": user, "room": room})
             yield [s.write(request.pack()) for s in self.get_streams(room)]
 
     @gen.coroutine
-    def notification(self, user_id, room, message):
-        if room in self._rooms and user_id in self._rooms[room]:
-            request = Message("MESS", kwargs={"user_id": user_id, "room": room, "message": message})
+    def notification(self, user, room, message):
+        if room is None or user is None:
+            raise ValueException("Room or Username should not be empty")
+        if room in self._rooms and user in self._rooms[room]:
+            request = Message("MESS", kwargs={"user": user, "room": room, "message": message})
             yield [s.write(request.pack()) for s in self.get_streams(room)]
