@@ -38,7 +38,7 @@ class UserHandler(BaseHandler):
 
     def login(self, username):
         self._app.user = None
-        return Message("LOGIN", kwargs={"username": username})
+        return Message("LOGIN", kwargs={"username": username, "response_command": "set_user"})
 
     def left(self, room):
         if self._app.room == room:
@@ -47,7 +47,7 @@ class UserHandler(BaseHandler):
 
     def join(self, room):
         self._app.room = None
-        return Message("JOIN", kwargs={"user": self._app.user, "room": room})
+        return Message("JOIN", kwargs={"user": self._app.user, "room": room, "response_command": "set_room"})
 
     def mess(self, mess):
         return Message("MESS", kwargs={"user": self._app.user, "room": self._app.room, "message": mess})
@@ -55,7 +55,7 @@ class UserHandler(BaseHandler):
 
 class NotificationHandler(BaseHandler):
 
-    allowed_commands = ['login', 'join', 'left', 'mess']
+    allowed_commands = ['set_user', 'set_room', 'join', 'left', 'mess']
 
     def __init__(self, request, app):
         super().__init__(request)
@@ -73,30 +73,34 @@ class NotificationHandler(BaseHandler):
             message = handler()
             if message: print_(message)
 
-    def login(self):
+    def set_user(self):
         self._app.user = user = self._request.kwargs['user']
         date = self._request.kwargs['date']
         return '[{date}]: You are login as: "{user}"'.format(date=date, user=user)
 
-    def join(self):
+    def set_room(self):
         self._app.room = room = self._request.kwargs['room']
         date = self._request.kwargs['date']
         return '[{date}]: You have joined the room: "{room}"'.format(date=date, room=room)
 
+    def join(self):
+        room = self._request.kwargs['room']
+        date = self._request.kwargs['date']
+        user = self._request.kwargs['user']
+        return '[{date}]-[{room}]: User: {user} have joined the room'.format(date=date, room=room, user=user)
+
     def left(self):
-        if 'code' not in self._request.kwargs:
-            room = self._request.kwargs['room']
-            if self._app.room == room:
-                self._app.room = None
-            date = self._request.kwargs['date']
-            return '[{date}]: You leave the room: "{room}"'.format(date=date, room=room)
+        room = self._request.kwargs['room']
+        if self._app.room == room:
+            self._app.room = None
+        date = self._request.kwargs['date']
+        return '[{date}]: You leave the room: "{room}"'.format(date=date, room=room)
 
     def mess(self):
-        if 'code' not in self._request.kwargs:
-            date = self._request.kwargs['date']
-            message = self._request.kwargs['message']
-            return '[{date}]-[{room}]-{user}: {message}'.format(date=date, room=self._app.room,
-                                                                user=self._app.user, message=message)
+        date = self._request.kwargs['date']
+        message = self._request.kwargs['message']
+        return '[{date}]-[{room}]-{user}: {message}'.format(date=date, room=self._app.room,
+                                                            user=self._app.user, message=message)
 
 
 # Клиентское прилоежние

@@ -1,6 +1,7 @@
 import copy
 
 from tornado import gen
+from tornado import concurrent
 
 from common.messages import Message
 from common.exceptions import TcpException, MethodNotExists
@@ -33,6 +34,7 @@ class ServerHandler(BaseHandler):
         self._storage = storage
         self._data = {}
         self._status_code = 0
+        self._response_command = self.get_argument("response_command")
 
     # Добавить значение в Response
     def write(self, **kwargs):
@@ -53,18 +55,20 @@ class ServerHandler(BaseHandler):
         d["code"] = self._status_code
         return d
 
+    @gen.coroutine
+    def get_response(self):
+        return None if self._response_command is None else (self._response_command, self.data)
+
     # Обработка запроса
+    @gen.coroutine
     def process_request(self):
-        future = gen.TracebackFuture()
         try:
             handler = self._get_handler(self._request.command)
             if handler is None:
                 raise MethodNotExists(self._request.command)
-            handler(self._request)
+            yield handler(self._request)
         except TcpException as e:
             self.write(message=e.message)
             self.status_code(e.code)
-
-        response = Message(self._request.command, kwargs=self.data)
-        future.set_result(response)
-        return future
+            self._response_command = "RESP"
+        yield self.get_response()

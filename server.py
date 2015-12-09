@@ -21,6 +21,7 @@ options.options.parse_command_line()
 class ChatHandler(ServerHandler):
     allowed_commands = ['login', 'join', 'left', 'mess']
 
+    @gen.coroutine
     def login(self, request):
         username = self.get_argument("username")
         self._storage.set_user(username, self._socket_id)
