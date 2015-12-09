@@ -1,9 +1,7 @@
 import copy
 
 from tornado import gen
-from tornado import concurrent
 
-from common.messages import Message
 from common.exceptions import TcpException, MethodNotExists
 
 __all__ = ['BaseHandler', 'ServerHandler']
@@ -34,7 +32,7 @@ class ServerHandler(BaseHandler):
         self._storage = storage
         self._data = {}
         self._status_code = 0
-        self._response_command = self.get_argument("response_command")
+        self._response_command = self.get_argument("response_command", "RESP")
 
     # Добавить значение в Response
     def write(self, **kwargs):
@@ -55,10 +53,6 @@ class ServerHandler(BaseHandler):
         d["code"] = self._status_code
         return d
 
-    @gen.coroutine
-    def get_response(self):
-        return None if self._response_command is None else (self._response_command, self.data)
-
     # Обработка запроса
     @gen.coroutine
     def process_request(self):
@@ -71,4 +65,4 @@ class ServerHandler(BaseHandler):
             self.write(message=e.message)
             self.status_code(e.code)
             self._response_command = "RESP"
-        yield self.get_response()
+        raise gen.Return(None if self._response_command is None else (self._response_command, self.data))

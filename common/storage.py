@@ -25,16 +25,18 @@ class Storage(metaclass=Singleton):
         return self._streams[id_]
 
     def set_room(self, room):
-        if room is not None and room not in self._rooms:
-            self._rooms[room] = set()
+        if room:
+            if room not in self._rooms:
+                self._rooms[room] = set()
         else:
             raise ValueException("Room should not be empty")
 
     def set_user(self, user, stream_id):
-        if user is not None and stream_id is not None and user not in self._users:
-            self._users[user] = stream_id
+        if user and user not in self._users:
+            if stream_id is not None:
+                self._users[user] = stream_id
         else:
-            raise ValueException("Username: {0} is already user".format(user))
+            raise ValueException("Username: {0} is already use".format(user))
 
     @gen.coroutine
     def disconnect(self, stream_id):

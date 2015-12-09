@@ -48,7 +48,7 @@ class Protocol():
                 response = yield handler.process_request()
                 # Вернуть ответ
                 if response:
-                    response = Message(response_command, kwargs=data)
+                    response = Message(response[0], kwargs=response[1])
                     yield self._stream.write(response.pack())
         except iostream.StreamClosedError:
             pass

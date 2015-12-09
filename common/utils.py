@@ -38,5 +38,5 @@ def blank_current_readline():
 def print_(message):
     blank_current_readline()
     print(message)
-    sys.stdout.write('> ' + readline.get_line_buffer())
+    sys.stdout.write("> " + readline.get_line_buffer())
     sys.stdout.flush()
